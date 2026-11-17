@@ -1,7 +1,11 @@
+import json
+
 from django.contrib import messages
+from django.http import JsonResponse
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
@@ -40,47 +44,95 @@ class AmbienteUpdateView(UpdateView):
 
 
 class PlantaView(TemplateView):
-    """Função principal: planta 2D com os ambientes e os equipamentos dentro de cada um."""
+    """Função principal: planta 2D interativa (ambientes e equipamentos posicionáveis)."""
 
     template_name = "inventario/planta.html"
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ativos = Equipamento.objects.exclude(status=Equipamento.Status.INATIVO).order_by("patrimonio")
-        ambientes = list(
-            Ambiente.objects.prefetch_related(Prefetch("equipamentos", queryset=ativos, to_attr="ativos"))
-        )
+        ambientes = []
         sem_posicao = 0
-        for a in ambientes:
+        for a in Ambiente.objects.all():
             if None in (a.planta_x, a.planta_y, a.planta_largura, a.planta_altura):
                 i = sem_posicao
                 sem_posicao += 1
-                a.px, a.py, a.pw, a.ph = 2 + (i % 3) * 33, 2 + (i // 3) * 32, 30, 28
+                x, y, w, h = 2 + (i % 3) * 33, 2 + (i // 3) * 32, 30, 28
             else:
-                a.px, a.py, a.pw, a.ph = a.planta_x, a.planta_y, a.planta_largura, a.planta_altura
+                x, y, w, h = a.planta_x, a.planta_y, a.planta_largura, a.planta_altura
+            ambientes.append({"id": a.pk, "nome": a.nome, "tipo": a.get_tipo_display(), "x": x, "y": y, "w": w, "h": h})
 
-        q = self.request.GET.get("q", "").strip()
-        hits = set()
-        if q:
-            hits = set(
-                Equipamento.objects.filter(
-                    Q(patrimonio__icontains=q) | Q(nome__icontains=q) | Q(modelo__icontains=q) | Q(categoria__icontains=q)
-                ).values_list("pk", flat=True)
-            )
-
-        selecionado = None
-        sel_id = self.request.GET.get("ambiente", "")
-        if sel_id.isdigit():
-            selecionado = next((a for a in ambientes if a.pk == int(sel_id)), None)
-
-        ctx.update(
-            ambientes=ambientes,
-            selecionado=selecionado,
-            q=q,
-            hits=hits,
-            categorias=Equipamento.Categoria.choices,
-        )
+        equipamentos = [
+            {
+                "id": e.pk,
+                "patrimonio": e.patrimonio,
+                "nome": e.nome,
+                "modelo": e.modelo,
+                "categoria": e.categoria,
+                "categoria_label": e.get_categoria_display(),
+                "status_label": e.get_status_display(),
+                "ambiente": e.ambiente_id,
+                "x": e.planta_x,
+                "y": e.planta_y,
+                "url": e.get_absolute_url(),
+            }
+            for e in Equipamento.objects.exclude(status=Equipamento.Status.INATIVO).order_by("patrimonio")
+        ]
+        ctx["dados"] = {
+            "ambientes": ambientes,
+            "equipamentos": equipamentos,
+            "categorias": [list(c) for c in Equipamento.Categoria.choices],
+            "urls": {
+                "ambiente": reverse("inventario:planta_ambiente_pos", args=[0]),
+                "equipamento": reverse("inventario:planta_equipamento_pos", args=[0]),
+            },
+        }
         return ctx
+
+
+def _json_body(request):
+    try:
+        return json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        return None
+
+
+@require_POST
+def planta_ambiente_posicao(request, pk):
+    """Salva posição e tamanho do ambiente na planta (em %)."""
+    ambiente = get_object_or_404(Ambiente, pk=pk)
+    corpo = _json_body(request)
+    try:
+        x, y, w, h = (int(round(float(corpo[k]))) for k in ("x", "y", "largura", "altura"))
+    except (TypeError, KeyError, ValueError):
+        return JsonResponse({"erro": "dados inválidos"}, status=400)
+    if w < 5 or h < 5 or x < 0 or y < 0 or x + w > 100 or y + h > 100:
+        return JsonResponse({"erro": "posição fora da planta"}, status=400)
+    ambiente.planta_x, ambiente.planta_y, ambiente.planta_largura, ambiente.planta_altura = x, y, w, h
+    ambiente.save(update_fields=["planta_x", "planta_y", "planta_largura", "planta_altura"])
+    return JsonResponse({"ok": True})
+
+
+@require_POST
+def planta_equipamento_posicao(request, pk):
+    """Salva a posição do equipamento dentro do ambiente; se vier 'ambiente', atualiza a localização."""
+    equipamento = get_object_or_404(Equipamento, pk=pk)
+    corpo = _json_body(request)
+    try:
+        x, y = float(corpo["x"]), float(corpo["y"])
+    except (TypeError, KeyError, ValueError):
+        return JsonResponse({"erro": "dados inválidos"}, status=400)
+    if not (0 <= x <= 100 and 0 <= y <= 100):
+        return JsonResponse({"erro": "posição fora do ambiente"}, status=400)
+    campos = ["planta_x", "planta_y", "atualizado_em"]
+    if corpo.get("ambiente") is not None:
+        try:
+            equipamento.ambiente = Ambiente.objects.get(pk=int(corpo["ambiente"]))
+        except (TypeError, ValueError, Ambiente.DoesNotExist):
+            return JsonResponse({"erro": "ambiente inválido"}, status=400)
+        campos.append("ambiente")
+    equipamento.planta_x, equipamento.planta_y = x, y
+    equipamento.save(update_fields=campos)
+    return JsonResponse({"ok": True})
 
 
 class EquipamentoListView(ListView):

@@ -37,7 +37,7 @@ python manage.py test
 | US01 Ambientes | `/ambientes/`, `/ambientes/novo/` |
 | US02 Cadastro de equipamento | `/equipamentos/novo/` |
 | US03 Consulta e busca | `/equipamentos/` (busca por patrimônio, nome/modelo, categoria) |
-| Planta 2D (versão simples) | `/planta/` — ambientes posicionados em %, equipamentos como marcadores, clique no ambiente lista os itens |
+| Planta 2D interativa | `/planta/` — arraste ambientes e equipamentos (Modo edição), clique para ver detalhes, busca e filtro por categoria; mover um item para outro ambiente atualiza a localização |
 | US04 Editar / inativar | `/equipamentos/<id>/editar/`, `/equipamentos/<id>/inativar/` |
 
 Próximas Sprints: planta interativa (US05–US07), manutenção, movimentação e CSV (US08–US10).

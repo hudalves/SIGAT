@@ -62,6 +62,9 @@ class Equipamento(models.Model):
         related_name="equipamentos",
     )
     observacoes = models.TextField("observações", blank=True)
+    # Posição do item dentro do ambiente na planta, em % da caixa do ambiente (0–100). Vazio = automático.
+    planta_x = models.FloatField("posição X no ambiente (%)", null=True, blank=True)
+    planta_y = models.FloatField("posição Y no ambiente (%)", null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 

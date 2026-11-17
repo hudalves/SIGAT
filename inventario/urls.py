@@ -8,6 +8,8 @@ app_name = "inventario"
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="inventario:planta"), name="home"),
     path("planta/", views.PlantaView.as_view(), name="planta"),
+    path("planta/ambiente/<int:pk>/posicao/", views.planta_ambiente_posicao, name="planta_ambiente_pos"),
+    path("planta/equipamento/<int:pk>/posicao/", views.planta_equipamento_posicao, name="planta_equipamento_pos"),
     path("ambientes/", views.AmbienteListView.as_view(), name="ambiente_lista"),
     path("ambientes/<int:pk>/editar/", views.AmbienteUpdateView.as_view(), name="ambiente_editar"),
     path("ambientes/novo/", views.AmbienteCreateView.as_view(), name="ambiente_novo"),

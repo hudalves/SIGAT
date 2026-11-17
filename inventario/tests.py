@@ -1,3 +1,5 @@
+import json
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -92,35 +94,74 @@ class EquipamentoTests(TestCase):  # US02, US03, US04
         self.assertContains(self.client.get(url, {"inativos": "1"}), "CA04")
 
 
-class PlantaTests(TestCase):  # função principal: planta 2D
+class PlantaTests(TestCase):  # função principal: planta 2D interativa
     def setUp(self):
         self.amb = Ambiente.objects.create(
-            nome="Recepção", tipo="setor", planta_x=5, planta_y=10, planta_largura=40, planta_altura=40
+            nome="Recepcao", tipo="setor", planta_x=5, planta_y=10, planta_largura=40, planta_altura=40
         )
+        self.outro = Ambiente.objects.create(nome="Sala TI", tipo="sala", planta_x=50, planta_y=10, planta_largura=40, planta_altura=40)
         self.eq = Equipamento.objects.create(**{**dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA10"})
 
-    def test_planta_mostra_ambiente_e_equipamento(self):
+    def post_json(self, url, corpo):
+        return self.client.post(url, data=json.dumps(corpo), content_type="application/json")
+
+    def test_planta_entrega_dados_de_ambientes_e_equipamentos(self):
         resp = self.client.get(reverse("inventario:planta"))
-        self.assertContains(resp, "Recepção")
-        self.assertContains(resp, "CA10")  # aparece no marcador (title)
-        self.assertContains(resp, "left:5%")
+        self.assertEqual(resp.status_code, 200)
+        dados = resp.context["dados"]
+        self.assertEqual({a["nome"] for a in dados["ambientes"]}, {"Recepcao", "Sala TI"})
+        self.assertEqual([e["patrimonio"] for e in dados["equipamentos"]], ["CA10"])
+        self.assertContains(resp, 'id="planta"')
 
-    def test_planta_ambiente_selecionado_lista_equipamentos(self):
-        resp = self.client.get(reverse("inventario:planta"), {"ambiente": self.amb.pk})
-        self.assertContains(resp, "Patrimônio")
-        self.assertContains(resp, reverse("inventario:equipamento_detalhe", args=[self.eq.pk]))
-
-    def test_planta_nao_mostra_inativos(self):
+    def test_planta_nao_inclui_inativos(self):
         self.eq.status = Equipamento.Status.INATIVO
         self.eq.save()
-        self.assertNotContains(self.client.get(reverse("inventario:planta")), "CA10")
-
-    def test_ambiente_sem_posicao_aparece_em_posicao_automatica(self):
-        Ambiente.objects.create(nome="Depósito", tipo="deposito")
         resp = self.client.get(reverse("inventario:planta"))
-        self.assertContains(resp, "Depósito")
+        self.assertEqual(resp.context["dados"]["equipamentos"], [])
 
-    def test_valida_posicao_fora_da_planta(self):
+    def test_ambiente_sem_posicao_recebe_posicao_automatica(self):
+        Ambiente.objects.create(nome="Deposito", tipo="deposito")
+        resp = self.client.get(reverse("inventario:planta"))
+        dep = [a for a in resp.context["dados"]["ambientes"] if a["nome"] == "Deposito"][0]
+        self.assertIsNotNone(dep["x"])
+        self.assertGreaterEqual(dep["w"], 5)
+
+    def test_salva_posicao_do_ambiente(self):
+        url = reverse("inventario:planta_ambiente_pos", args=[self.amb.pk])
+        resp = self.post_json(url, {"x": 10, "y": 20, "largura": 30, "altura": 25})
+        self.assertEqual(resp.status_code, 200)
+        self.amb.refresh_from_db()
+        self.assertEqual((self.amb.planta_x, self.amb.planta_y, self.amb.planta_largura, self.amb.planta_altura), (10, 20, 30, 25))
+
+    def test_rejeita_posicao_do_ambiente_fora_da_planta(self):
+        url = reverse("inventario:planta_ambiente_pos", args=[self.amb.pk])
+        self.assertEqual(self.post_json(url, {"x": 80, "y": 20, "largura": 40, "altura": 25}).status_code, 400)
+        self.assertEqual(self.post_json(url, {"x": "a"}).status_code, 400)
+
+    def test_salva_posicao_do_equipamento(self):
+        url = reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])
+        resp = self.post_json(url, {"x": 40.5, "y": 60})
+        self.assertEqual(resp.status_code, 200)
+        self.eq.refresh_from_db()
+        self.assertEqual((self.eq.planta_x, self.eq.planta_y), (40.5, 60))
+        self.assertEqual(self.eq.ambiente, self.amb)
+
+    def test_mover_equipamento_para_outro_ambiente_atualiza_localizacao(self):
+        url = reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])
+        resp = self.post_json(url, {"x": 30, "y": 30, "ambiente": self.outro.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.eq.refresh_from_db()
+        self.assertEqual(self.eq.ambiente, self.outro)
+
+    def test_rejeita_posicao_invalida_do_equipamento(self):
+        url = reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])
+        self.assertEqual(self.post_json(url, {"x": 150, "y": 10}).status_code, 400)
+        self.assertEqual(self.post_json(url, {"x": 10, "y": 10, "ambiente": 9999}).status_code, 400)
+
+    def test_endpoints_de_posicao_aceitam_apenas_post(self):
+        self.assertEqual(self.client.get(reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])).status_code, 405)
+
+    def test_valida_posicao_fora_da_planta_no_formulario(self):
         resp = self.client.post(reverse("inventario:ambiente_novo"), {
             "nome": "Fora", "tipo": "sala", "descricao": "",
             "planta_x": 80, "planta_y": 10, "planta_largura": 40, "planta_altura": 20,
@@ -128,7 +169,7 @@ class PlantaTests(TestCase):  # função principal: planta 2D
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Ambiente.objects.filter(nome="Fora").exists())
 
-    def test_posicao_incompleta_e_rejeitada(self):
+    def test_posicao_incompleta_e_rejeitada_no_formulario(self):
         resp = self.client.post(reverse("inventario:ambiente_novo"), {
             "nome": "Parcial", "tipo": "sala", "descricao": "", "planta_x": 10,
         })
