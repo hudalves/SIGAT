@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views import View
@@ -25,6 +25,62 @@ class AmbienteCreateView(CreateView):
     def form_valid(self, form):
         messages.success(self.request, "Ambiente cadastrado com sucesso.")
         return super().form_valid(form)
+
+
+class AmbienteUpdateView(UpdateView):
+    model = Ambiente
+    form_class = AmbienteForm
+    template_name = "inventario/form.html"
+    success_url = reverse_lazy("inventario:ambiente_lista")
+    extra_context = {"titulo": "Editar ambiente"}
+
+    def form_valid(self, form):
+        messages.success(self.request, "Ambiente atualizado.")
+        return super().form_valid(form)
+
+
+class PlantaView(TemplateView):
+    """Função principal: planta 2D com os ambientes e os equipamentos dentro de cada um."""
+
+    template_name = "inventario/planta.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ativos = Equipamento.objects.exclude(status=Equipamento.Status.INATIVO).order_by("patrimonio")
+        ambientes = list(
+            Ambiente.objects.prefetch_related(Prefetch("equipamentos", queryset=ativos, to_attr="ativos"))
+        )
+        sem_posicao = 0
+        for a in ambientes:
+            if None in (a.planta_x, a.planta_y, a.planta_largura, a.planta_altura):
+                i = sem_posicao
+                sem_posicao += 1
+                a.px, a.py, a.pw, a.ph = 2 + (i % 3) * 33, 2 + (i // 3) * 32, 30, 28
+            else:
+                a.px, a.py, a.pw, a.ph = a.planta_x, a.planta_y, a.planta_largura, a.planta_altura
+
+        q = self.request.GET.get("q", "").strip()
+        hits = set()
+        if q:
+            hits = set(
+                Equipamento.objects.filter(
+                    Q(patrimonio__icontains=q) | Q(nome__icontains=q) | Q(modelo__icontains=q) | Q(categoria__icontains=q)
+                ).values_list("pk", flat=True)
+            )
+
+        selecionado = None
+        sel_id = self.request.GET.get("ambiente", "")
+        if sel_id.isdigit():
+            selecionado = next((a for a in ambientes if a.pk == int(sel_id)), None)
+
+        ctx.update(
+            ambientes=ambientes,
+            selecionado=selecionado,
+            q=q,
+            hits=hits,
+            categorias=Equipamento.Categoria.choices,
+        )
+        return ctx
 
 
 class EquipamentoListView(ListView):

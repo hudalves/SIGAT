@@ -6,8 +6,10 @@ from . import views
 app_name = "inventario"
 
 urlpatterns = [
-    path("", RedirectView.as_view(pattern_name="inventario:equipamento_lista"), name="home"),
+    path("", RedirectView.as_view(pattern_name="inventario:planta"), name="home"),
+    path("planta/", views.PlantaView.as_view(), name="planta"),
     path("ambientes/", views.AmbienteListView.as_view(), name="ambiente_lista"),
+    path("ambientes/<int:pk>/editar/", views.AmbienteUpdateView.as_view(), name="ambiente_editar"),
     path("ambientes/novo/", views.AmbienteCreateView.as_view(), name="ambiente_novo"),
     path("equipamentos/", views.EquipamentoListView.as_view(), name="equipamento_lista"),
     path("equipamentos/novo/", views.EquipamentoCreateView.as_view(), name="equipamento_novo"),

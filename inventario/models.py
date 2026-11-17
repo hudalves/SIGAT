@@ -15,6 +15,11 @@ class Ambiente(models.Model):
     nome = models.CharField("nome", max_length=100, unique=True)
     tipo = models.CharField("tipo", max_length=20, choices=Tipo.choices, default=Tipo.SETOR)
     descricao = models.TextField("descrição", blank=True)
+    # Posição na planta 2D, em % da largura/altura da planta (0–100). Vazio = posicionamento automático.
+    planta_x = models.PositiveSmallIntegerField("posição X na planta (%)", null=True, blank=True)
+    planta_y = models.PositiveSmallIntegerField("posição Y na planta (%)", null=True, blank=True)
+    planta_largura = models.PositiveSmallIntegerField("largura na planta (%)", null=True, blank=True)
+    planta_altura = models.PositiveSmallIntegerField("altura na planta (%)", null=True, blank=True)
 
     class Meta:
         ordering = ["nome"]

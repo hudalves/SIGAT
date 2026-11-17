@@ -13,6 +13,10 @@ class Command(BaseCommand):
         sala_ti, _ = Ambiente.objects.get_or_create(
             nome="Sala de TI", defaults={"tipo": Ambiente.Tipo.SALA, "descricao": "Suporte e infraestrutura (demo)"}
         )
+        for amb, pos in ((recepcao, (5, 10, 40, 45)), (sala_ti, (52, 10, 40, 45))):
+            if amb.planta_x is None:
+                amb.planta_x, amb.planta_y, amb.planta_largura, amb.planta_altura = pos
+                amb.save()
         demo = [
             ("DEMO-001", "PC Balcão 1", "computador", "Dell", "OptiPlex 3080", "SN-DEMO-001", "em_uso", recepcao),
             ("DEMO-002", "Monitor Balcão 1", "monitor", "LG", "24MK430H", "SN-DEMO-002", "em_uso", recepcao),

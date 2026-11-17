@@ -26,3 +26,18 @@ input[type=text], select, textarea { width:100%; padding:.5rem; border:1px solid
 .vazio { color:#667; }
 dl { display:grid; grid-template-columns:200px 1fr; gap:.4rem 1rem; }
 dt { font-weight:600; }
+
+.planta { position:relative; width:100%; aspect-ratio:16/10; background:#fff; border:3px solid #555; border-radius:4px;
+  background-image:linear-gradient(#eef1f5 1px,transparent 1px),linear-gradient(90deg,#eef1f5 1px,transparent 1px); background-size:5% 5%; }
+.sala { position:absolute; border:2px solid #6c8ebf; background:rgba(218,232,252,.85); padding:.3rem .4rem; overflow:hidden;
+  text-decoration:none; color:var(--texto); display:flex; flex-direction:column; gap:.15rem; font-size:.85rem; border-radius:4px; }
+.sala:hover { background:#cfe0fa; }
+.sala.sel { border-color:#d97706; background:#fff3d6; }
+.sala small { color:#556; }
+.marcadores { display:flex; flex-wrap:wrap; }
+.mk { display:inline-block; width:14px; height:14px; border-radius:3px; margin:2px; background:#888; vertical-align:middle; }
+.mk.hit { outline:3px solid #d97706; }
+.cat-computador { background:#1f4e8c; } .cat-notebook { background:#4c78b8; } .cat-monitor { background:#2e7d32; }
+.cat-impressora { background:#8e24aa; } .cat-rede { background:#ef6c00; } .cat-periferico { background:#00838f; } .cat-outro { background:#757575; }
+.legenda { font-size:.85rem; color:#445; display:flex; gap:1rem; flex-wrap:wrap; margin:.6rem 0 0; }
+.hit-row td { background:#fff3d6; }

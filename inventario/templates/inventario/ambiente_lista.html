@@ -6,9 +6,9 @@
   <p><a class="btn" href="{% url 'inventario:ambiente_novo' %}">+ Novo ambiente</a></p>
   {% if ambientes %}
   <table>
-    <tr><th>Nome</th><th>Tipo</th><th>Descrição</th></tr>
+    <tr><th>Nome</th><th>Tipo</th><th>Descrição</th><th></th></tr>
     {% for a in ambientes %}
-    <tr><td>{{ a.nome }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descricao|default:"—" }}</td></tr>
+    <tr><td>{{ a.nome }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descricao|default:"—" }}</td><td><a href="{% url 'inventario:ambiente_editar' a.pk %}">Editar</a></td></tr>
     {% endfor %}
   </table>
   {% else %}<p class="vazio">Nenhum ambiente cadastrado ainda.</p>{% endif %}

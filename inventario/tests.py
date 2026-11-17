@@ -90,3 +90,47 @@ class EquipamentoTests(TestCase):  # US02, US03, US04
         url = reverse("inventario:equipamento_lista")
         self.assertNotContains(self.client.get(url), "CA04")
         self.assertContains(self.client.get(url, {"inativos": "1"}), "CA04")
+
+
+class PlantaTests(TestCase):  # função principal: planta 2D
+    def setUp(self):
+        self.amb = Ambiente.objects.create(
+            nome="Recepção", tipo="setor", planta_x=5, planta_y=10, planta_largura=40, planta_altura=40
+        )
+        self.eq = Equipamento.objects.create(**{**dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA10"})
+
+    def test_planta_mostra_ambiente_e_equipamento(self):
+        resp = self.client.get(reverse("inventario:planta"))
+        self.assertContains(resp, "Recepção")
+        self.assertContains(resp, "CA10")  # aparece no marcador (title)
+        self.assertContains(resp, "left:5%")
+
+    def test_planta_ambiente_selecionado_lista_equipamentos(self):
+        resp = self.client.get(reverse("inventario:planta"), {"ambiente": self.amb.pk})
+        self.assertContains(resp, "Patrimônio")
+        self.assertContains(resp, reverse("inventario:equipamento_detalhe", args=[self.eq.pk]))
+
+    def test_planta_nao_mostra_inativos(self):
+        self.eq.status = Equipamento.Status.INATIVO
+        self.eq.save()
+        self.assertNotContains(self.client.get(reverse("inventario:planta")), "CA10")
+
+    def test_ambiente_sem_posicao_aparece_em_posicao_automatica(self):
+        Ambiente.objects.create(nome="Depósito", tipo="deposito")
+        resp = self.client.get(reverse("inventario:planta"))
+        self.assertContains(resp, "Depósito")
+
+    def test_valida_posicao_fora_da_planta(self):
+        resp = self.client.post(reverse("inventario:ambiente_novo"), {
+            "nome": "Fora", "tipo": "sala", "descricao": "",
+            "planta_x": 80, "planta_y": 10, "planta_largura": 40, "planta_altura": 20,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Ambiente.objects.filter(nome="Fora").exists())
+
+    def test_posicao_incompleta_e_rejeitada(self):
+        resp = self.client.post(reverse("inventario:ambiente_novo"), {
+            "nome": "Parcial", "tipo": "sala", "descricao": "", "planta_x": 10,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Ambiente.objects.filter(nome="Parcial").exists())

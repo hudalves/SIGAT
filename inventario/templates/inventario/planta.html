@@ -1,0 +1,54 @@
+{% extends "inventario/base.html" %}
+{% block title %}Planta{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Planta do local</h1>
+  <form class="filtros" method="get">
+    <div><label>Destacar equipamento</label><input type="text" name="q" value="{{ q }}" placeholder="Patrimônio, nome, modelo ou categoria"></div>
+    <button class="btn" type="submit">Destacar</button>
+    <a class="btn sec" href="{% url 'inventario:planta' %}">Limpar</a>
+    <a class="btn sec" href="{% url 'inventario:ambiente_novo' %}">+ Ambiente</a>
+  </form>
+  {% if ambientes %}
+  <div class="planta">
+    {% for a in ambientes %}
+    <a class="sala {% if selecionado and a.pk == selecionado.pk %}sel{% endif %}"
+       style="left:{{ a.px }}%;top:{{ a.py }}%;width:{{ a.pw }}%;height:{{ a.ph }}%"
+       href="?ambiente={{ a.pk }}{% if q %}&q={{ q }}{% endif %}">
+      <strong>{{ a.nome }}</strong>
+      <small>{{ a.ativos|length }} equipamento{{ a.ativos|length|pluralize }}</small>
+      <span class="marcadores">{% for e in a.ativos %}<i class="mk cat-{{ e.categoria }}{% if e.pk in hits %} hit{% endif %}" title="{{ e.patrimonio }} — {{ e.nome|default:e.modelo }}"></i>{% endfor %}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <p class="legenda">
+    {% for valor, rotulo in categorias %}<span><i class="mk cat-{{ valor }}"></i> {{ rotulo }}</span> {% endfor %}
+  </p>
+  {% else %}
+  <p class="vazio">Cadastre ambientes para montar a planta.</p>
+  {% endif %}
+</div>
+
+{% if selecionado %}
+<div class="card">
+  <h1>{{ selecionado.nome }}</h1>
+  {% if selecionado.ativos %}
+  <table>
+    <tr><th>Patrimônio</th><th>Nome / modelo</th><th>Categoria</th><th>Status</th></tr>
+    {% for e in selecionado.ativos %}
+    <tr {% if e.pk in hits %}class="hit-row"{% endif %}>
+      <td><a href="{{ e.get_absolute_url }}">{{ e.patrimonio }}</a></td>
+      <td>{{ e.nome|default:e.modelo }}</td>
+      <td>{{ e.get_categoria_display }}</td>
+      <td>{{ e.get_status_display }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="vazio">Nenhum equipamento ativo neste ambiente.</p>{% endif %}
+  <p><a class="btn" href="{% url 'inventario:equipamento_novo' %}">+ Novo equipamento</a>
+     <a class="btn sec" href="{% url 'inventario:ambiente_editar' selecionado.pk %}">Editar ambiente</a></p>
+</div>
+{% else %}
+{% if ambientes %}<p class="vazio">Clique em um ambiente da planta para ver os equipamentos dentro dele.</p>{% endif %}
+{% endif %}
+{% endblock %}
