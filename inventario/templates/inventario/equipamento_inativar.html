@@ -1,0 +1,14 @@
+{% extends "inventario/base.html" %}
+{% block title %}Inativar equipamento{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Inativar equipamento</h1>
+  <p>Você está inativando <strong>{{ equipamento.patrimonio }}</strong> ({{ equipamento.nome|default:equipamento.modelo }}).
+     O registro e o histórico serão mantidos; ele só deixa de aparecer na lista padrão.</p>
+  <form method="post">
+    {% csrf_token %}
+    <button class="btn perigo" type="submit">Confirmar inativação</button>
+    <a class="btn sec" href="{{ equipamento.get_absolute_url }}">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

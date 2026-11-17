@@ -1,0 +1,40 @@
+{% extends "inventario/base.html" %}
+{% block title %}Equipamentos{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Equipamentos</h1>
+  <form class="filtros" method="get">
+    <div><label>Buscar</label><input type="text" name="q" value="{{ q }}" placeholder="Patrimônio, nome, modelo ou categoria"></div>
+    <div><label>Categoria</label>
+      <select name="categoria">
+        <option value="">Todas</option>
+        {% for valor, rotulo in categorias %}<option value="{{ valor }}" {% if valor == categoria_sel %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label><input type="checkbox" name="inativos" value="1" {% if inativos %}checked{% endif %}> Mostrar inativos</label></div>
+    <button class="btn" type="submit">Filtrar</button>
+    <a class="btn" href="{% url 'inventario:equipamento_novo' %}">+ Novo equipamento</a>
+  </form>
+  {% if equipamentos %}
+  <table>
+    <tr><th>Patrimônio</th><th>Nome / modelo</th><th>Categoria</th><th>Ambiente</th><th>Status</th></tr>
+    {% for e in equipamentos %}
+    <tr>
+      <td><a href="{{ e.get_absolute_url }}">{{ e.patrimonio }}</a></td>
+      <td>{{ e.nome|default:e.modelo }}</td>
+      <td>{{ e.get_categoria_display }}</td>
+      <td>{{ e.ambiente }}</td>
+      <td><span class="badge {% if e.esta_inativo %}inativo{% endif %}">{{ e.get_status_display }}</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if is_paginated %}
+  <p>
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&categoria={{ categoria_sel }}{% if inativos %}&inativos=1{% endif %}">« Anterior</a>{% endif %}
+    Página {{ page_obj.number }} de {{ paginator.num_pages }}
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ q }}&categoria={{ categoria_sel }}{% if inativos %}&inativos=1{% endif %}">Próxima »</a>{% endif %}
+  </p>
+  {% endif %}
+  {% else %}<p class="vazio">Nenhum equipamento encontrado.</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "inventario/base.html" %}
+{% block title %}{{ equipamento.patrimonio }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ equipamento.patrimonio }} {% if equipamento.nome %}— {{ equipamento.nome }}{% endif %}</h1>
+  <dl>
+    <dt>Categoria</dt><dd>{{ equipamento.get_categoria_display }}</dd>
+    <dt>Fabricante</dt><dd>{{ equipamento.fabricante }}</dd>
+    <dt>Modelo</dt><dd>{{ equipamento.modelo }}</dd>
+    <dt>Número de série</dt><dd>{{ equipamento.numero_serie }}</dd>
+    <dt>Status</dt><dd><span class="badge {% if equipamento.esta_inativo %}inativo{% endif %}">{{ equipamento.get_status_display }}</span></dd>
+    <dt>Ambiente</dt><dd>{{ equipamento.ambiente }}</dd>
+    <dt>Observações</dt><dd>{{ equipamento.observacoes|default:"—"|linebreaksbr }}</dd>
+  </dl>
+  <p>
+    <a class="btn" href="{% url 'inventario:equipamento_editar' equipamento.pk %}">Editar</a>
+    {% if not equipamento.esta_inativo %}<a class="btn perigo" href="{% url 'inventario:equipamento_inativar' equipamento.pk %}">Inativar</a>{% endif %}
+    <a class="btn sec" href="{% url 'inventario:equipamento_lista' %}">Voltar</a>
+  </p>
+</div>
+{% endblock %}

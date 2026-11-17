@@ -1,0 +1,29 @@
+from django.core.management.base import BaseCommand
+
+from inventario.models import Ambiente, Equipamento
+
+
+class Command(BaseCommand):
+    help = "Cria dados fictícios de demonstração (ambientes e equipamentos)."
+
+    def handle(self, *args, **options):
+        recepcao, _ = Ambiente.objects.get_or_create(
+            nome="Recepção", defaults={"tipo": Ambiente.Tipo.ATENDIMENTO, "descricao": "Atendimento ao público (demo)"}
+        )
+        sala_ti, _ = Ambiente.objects.get_or_create(
+            nome="Sala de TI", defaults={"tipo": Ambiente.Tipo.SALA, "descricao": "Suporte e infraestrutura (demo)"}
+        )
+        demo = [
+            ("DEMO-001", "PC Balcão 1", "computador", "Dell", "OptiPlex 3080", "SN-DEMO-001", "em_uso", recepcao),
+            ("DEMO-002", "Monitor Balcão 1", "monitor", "LG", "24MK430H", "SN-DEMO-002", "em_uso", recepcao),
+            ("DEMO-003", "Notebook Suporte", "notebook", "Lenovo", "ThinkPad E14", "SN-DEMO-003", "estoque", sala_ti),
+        ]
+        criados = 0
+        for pat, nome, cat, fab, mod, serie, status, amb in demo:
+            _, novo = Equipamento.objects.get_or_create(
+                patrimonio=pat,
+                defaults=dict(nome=nome, categoria=cat, fabricante=fab, modelo=mod,
+                              numero_serie=serie, status=status, ambiente=amb),
+            )
+            criados += int(novo)
+        self.stdout.write(self.style.SUCCESS(f"Dados de demonstração prontos ({criados} novos equipamentos)."))
