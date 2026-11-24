@@ -14,6 +14,7 @@ urlpatterns = [
     path("ambientes/<int:pk>/editar/", views.AmbienteUpdateView.as_view(), name="ambiente_editar"),
     path("ambientes/novo/", views.AmbienteCreateView.as_view(), name="ambiente_novo"),
     path("equipamentos/", views.EquipamentoListView.as_view(), name="equipamento_lista"),
+    path("equipamentos/exportar.csv", views.exportar_csv, name="equipamento_csv"),
     path("equipamentos/novo/", views.EquipamentoCreateView.as_view(), name="equipamento_novo"),
     path("equipamentos/<int:pk>/", views.EquipamentoDetailView.as_view(), name="equipamento_detalhe"),
     path("equipamentos/<int:pk>/editar/", views.EquipamentoUpdateView.as_view(), name="equipamento_editar"),

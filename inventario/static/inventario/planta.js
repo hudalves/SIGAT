@@ -176,7 +176,7 @@
 
       var itens = EQ.filter(function (e) { return e.ambiente === a.id; });
       sala.appendChild(el("strong", null, a.nome));
-      sala.appendChild(el("small", null, itens.length + (itens.length === 1 ? " equipamento" : " equipamentos")));
+      sala.appendChild(el("small", null, itens.length === 0 ? "Sem equipamentos" : itens.length + (itens.length === 1 ? " equipamento" : " equipamentos")));
       var fluxo = el("span", "marcadores");
       sala.appendChild(fluxo);
       itens.forEach(function (e) {
@@ -228,7 +228,7 @@
       if (!e) { selecionado = null; renderPainel(); return; }
       painel.appendChild(el("h2", null, e.patrimonio + (e.nome ? " — " + e.nome : "")));
       var dl = el("dl");
-      [["Categoria", e.categoria_label], ["Modelo", e.modelo], ["Status", e.status_label], ["Ambiente", ambPorId(e.ambiente).nome]].forEach(function (p) {
+      [["Identificação", e.patrimonio], ["Categoria", e.categoria_label], ["Fabricante", e.fabricante], ["Modelo", e.modelo], ["Número de série", e.numero_serie], ["Status", e.status_label], ["Ambiente", ambPorId(e.ambiente).nome], ["Observações", e.observacoes || "—"]].forEach(function (p) {
         dl.appendChild(el("dt", null, p[0]));
         dl.appendChild(el("dd", null, p[1]));
       });
@@ -242,7 +242,7 @@
       painel.appendChild(el("h2", null, a.nome + " (" + a.tipo + ")"));
       var itens = EQ.filter(function (x) { return x.ambiente === a.id; });
       if (!itens.length) {
-        painel.appendChild(el("p", "vazio", "Nenhum equipamento ativo neste ambiente."));
+        painel.appendChild(el("p", "vazio", "Nenhum equipamento associado a este ambiente."));
       } else {
         var tab = el("table");
         var cab = el("tr");

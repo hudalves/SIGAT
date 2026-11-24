@@ -175,3 +175,85 @@ class PlantaTests(TestCase):  # função principal: planta 2D interativa
         })
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Ambiente.objects.filter(nome="Parcial").exists())
+
+
+class ExportarCsvTests(TestCase):  # US10
+    def setUp(self):
+        self.amb = criar_ambiente("Recepção")
+        Equipamento.objects.create(**{**dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA01"})
+        Equipamento.objects.create(**{
+            **dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA02",
+            "categoria": Equipamento.Categoria.MONITOR, "modelo": "24MK430H", "nome": "=1+1",
+        })
+        Equipamento.objects.create(**{
+            **dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA03", "status": "inativo",
+        })
+
+    def baixar(self, **params):
+        resp = self.client.get(reverse("inventario:equipamento_csv"), params)
+        self.assertEqual(resp.status_code, 200)
+        return resp, resp.content.decode("utf-8-sig").splitlines()
+
+    def test_cabecalho_bom_e_tipo_de_arquivo(self):
+        resp, linhas = self.baixar()
+        self.assertTrue(resp.content.startswith(b"\xef\xbb\xbf"))  # BOM para o Excel
+        self.assertIn("text/csv", resp["Content-Type"])
+        self.assertIn("attachment", resp["Content-Disposition"])
+        self.assertTrue(linhas[0].startswith("Patrimônio;Nome;Categoria"))
+
+    def test_exporta_ativos_e_oculta_inativos_por_padrao(self):
+        _, linhas = self.baixar()
+        texto = "\n".join(linhas)
+        self.assertIn("CA01", texto)
+        self.assertIn("Recepção", texto)
+        self.assertNotIn("CA03", texto)
+
+    def test_inclui_inativos_quando_pedido(self):
+        _, linhas = self.baixar(inativos="1")
+        self.assertIn("CA03", "\n".join(linhas))
+
+    def test_respeita_busca_e_categoria(self):
+        _, linhas = self.baixar(q="24MK")
+        self.assertEqual(len(linhas), 2)  # cabeçalho + 1 linha
+        _, linhas = self.baixar(categoria="monitor")
+        self.assertEqual(len(linhas), 2)
+
+    def test_protege_contra_injecao_de_formula(self):
+        _, linhas = self.baixar(q="CA02")
+        self.assertIn("'=1+1", linhas[1])
+
+
+class CriteriosPlantaTests(TestCase):  # critérios de aceite US05, US06 e US07
+    def setUp(self):
+        self.amb = Ambiente.objects.create(nome="Recepção", tipo="setor", planta_x=5, planta_y=10, planta_largura=40, planta_altura=40)
+        self.vazio = Ambiente.objects.create(nome="Depósito", tipo="deposito", planta_x=50, planta_y=10, planta_largura=40, planta_altura=40)
+        self.eq = Equipamento.objects.create(**{
+            **dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA20",
+            "numero_serie": "SN-XYZ-99", "observacoes": "Teclado trocado em outubro",
+        })
+
+    def test_us05_planta_identifica_ambientes_e_ambiente_sem_ativos(self):
+        dados = self.client.get(reverse("inventario:planta")).context["dados"]
+        nomes = {a["nome"] for a in dados["ambientes"]}
+        self.assertEqual(nomes, {"Recepção", "Depósito"})
+        deposito = [a for a in dados["ambientes"] if a["nome"] == "Depósito"][0]
+        self.assertEqual([e for e in dados["equipamentos"] if e["ambiente"] == deposito["id"]], [])
+
+    def test_us06_ativos_do_ambiente_com_link_para_a_ficha(self):
+        dados = self.client.get(reverse("inventario:planta")).context["dados"]
+        itens = [e for e in dados["equipamentos"] if e["ambiente"] == self.amb.pk]
+        self.assertEqual([e["patrimonio"] for e in itens], ["CA20"])
+        self.assertEqual(itens[0]["url"], reverse("inventario:equipamento_detalhe", args=[self.eq.pk]))
+
+    def test_us07_planta_entrega_todos_os_campos_da_ficha(self):
+        dados = self.client.get(reverse("inventario:planta")).context["dados"]
+        e = dados["equipamentos"][0]
+        for campo in ("patrimonio", "categoria_label", "fabricante", "modelo", "numero_serie", "status_label", "ambiente", "observacoes"):
+            self.assertIn(campo, e)
+        self.assertEqual(e["numero_serie"], "SN-XYZ-99")
+        self.assertEqual(e["observacoes"], "Teclado trocado em outubro")
+
+    def test_us07_ficha_mostra_todos_os_campos(self):
+        resp = self.client.get(reverse("inventario:equipamento_detalhe", args=[self.eq.pk]))
+        for texto in ("CA20", "Dell", "OptiPlex 3080", "SN-XYZ-99", "Em uso", "Recepção", "Teclado trocado em outubro"):
+            self.assertContains(resp, texto)

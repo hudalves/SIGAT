@@ -1,16 +1,37 @@
+import csv
 import json
 
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
 from .forms import AmbienteForm, EquipamentoForm
 from .models import Ambiente, Equipamento
+
+
+def filtrar_equipamentos(params):
+    """Filtro único usado pela lista e pela exportação CSV (busca, categoria e inativos)."""
+    qs = Equipamento.objects.select_related("ambiente")
+    q = params.get("q", "").strip()
+    categoria = params.get("categoria", "")
+    if q:
+        qs = qs.filter(
+            Q(patrimonio__icontains=q)
+            | Q(nome__icontains=q)
+            | Q(modelo__icontains=q)
+            | Q(categoria__icontains=q)
+        )
+    if categoria:
+        qs = qs.filter(categoria=categoria)
+    if not params.get("inativos"):
+        qs = qs.exclude(status=Equipamento.Status.INATIVO)
+    return qs
 
 
 class AmbienteListView(ListView):
@@ -66,7 +87,10 @@ class PlantaView(TemplateView):
                 "id": e.pk,
                 "patrimonio": e.patrimonio,
                 "nome": e.nome,
+                "fabricante": e.fabricante,
                 "modelo": e.modelo,
+                "numero_serie": e.numero_serie,
+                "observacoes": e.observacoes,
                 "categoria": e.categoria,
                 "categoria_label": e.get_categoria_display(),
                 "status_label": e.get_status_display(),
@@ -144,21 +168,7 @@ class EquipamentoListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        qs = Equipamento.objects.select_related("ambiente")
-        q = self.request.GET.get("q", "").strip()
-        categoria = self.request.GET.get("categoria", "")
-        if q:
-            qs = qs.filter(
-                Q(patrimonio__icontains=q)
-                | Q(nome__icontains=q)
-                | Q(modelo__icontains=q)
-                | Q(categoria__icontains=q)
-            )
-        if categoria:
-            qs = qs.filter(categoria=categoria)
-        if not self.request.GET.get("inativos"):
-            qs = qs.exclude(status=Equipamento.Status.INATIVO)
-        return qs
+        return filtrar_equipamentos(self.request.GET)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -214,3 +224,34 @@ class EquipamentoInativarView(View):
         equipamento.save(update_fields=["status", "atualizado_em"])
         messages.success(request, f"{equipamento.patrimonio} foi inativado (o registro foi mantido).")
         return redirect("inventario:equipamento_lista")
+
+
+CSV_COLUNAS = [
+    "Patrimônio", "Nome", "Categoria", "Fabricante", "Modelo",
+    "Número de série", "Status", "Ambiente", "Observações",
+]
+
+
+def _celula_segura(valor):
+    """Evita injeção de fórmula ao abrir no Excel (células que começam com = + - @)."""
+    texto = "" if valor is None else str(valor)
+    return "'" + texto if texto[:1] in ("=", "+", "-", "@", "\t", "\r") else texto
+
+
+def exportar_csv(request):
+    """US10 — exporta o inventário em CSV (abre direto no Excel), respeitando os filtros da lista."""
+    resposta = HttpResponse(content_type="text/csv; charset=utf-8")
+    nome = f"inventario_sigat_{timezone.localdate():%Y-%m-%d}.csv"
+    resposta["Content-Disposition"] = f'attachment; filename="{nome}"'
+    resposta.write("\ufeff")  # BOM: o Excel reconhece acentos corretamente
+    escritor = csv.writer(resposta, delimiter=";")  # ';' é o separador padrão do Excel em pt-BR
+    escritor.writerow(CSV_COLUNAS)
+    for e in filtrar_equipamentos(request.GET).order_by("patrimonio"):
+        escritor.writerow([
+            _celula_segura(v)
+            for v in (
+                e.patrimonio, e.nome, e.get_categoria_display(), e.fabricante, e.modelo,
+                e.numero_serie, e.get_status_display(), e.ambiente.nome, e.observacoes,
+            )
+        ])
+    return resposta

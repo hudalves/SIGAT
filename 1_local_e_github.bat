@@ -1,9 +1,11 @@
 @echo off
 cd /d %~dp0
 echo === SIGAT: preparar, testar e publicar no GitHub ===
-python -m venv .venv || goto erro
+if not exist .venv\Scripts\python.exe python -m venv .venv
 call .venv\Scripts\activate
-pip install -r requirements.txt || goto erro
+echo Instalando dependencias (se estiver bloqueado, segue com o que ja esta instalado)...
+python -m pip install -q -r requirements.txt
+if errorlevel 1 echo AVISO: nao consegui instalar agora; usando o que ja esta instalado.
 python manage.py makemigrations inventario || goto erro
 python manage.py migrate || goto erro
 python manage.py seed_demo
@@ -12,7 +14,7 @@ echo.
 echo === Enviando para o GitHub ===
 git init
 git add .
-git commit -m "Sprint 1: ambientes e equipamentos (US01-US04)"
+git commit -m "Sprint 2: planta interativa, exportar CSV e integracao continua"
 git branch -M main
 git remote remove origin 2>nul
 git remote add origin https://github.com/hudalves/SIGAT.git
