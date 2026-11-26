@@ -82,3 +82,60 @@ class Equipamento(models.Model):
 
     def get_absolute_url(self):
         return reverse("inventario:equipamento_detalhe", args=[self.pk])
+
+    def mover_para(self, destino, observacao=""):
+        """US09 — troca o ambiente atual e registra origem/destino no histórico de movimentação."""
+        if destino.pk == self.ambiente_id:
+            return None
+        movimentacao = Movimentacao.objects.create(
+            equipamento=self, origem=self.ambiente, destino=destino, observacao=observacao
+        )
+        self.ambiente = destino
+        self.planta_x = self.planta_y = None  # a posição antiga não vale no novo ambiente
+        self.save(update_fields=["ambiente", "planta_x", "planta_y", "atualizado_em"])
+        return movimentacao
+
+
+class Manutencao(models.Model):
+    """US08 — histórico de manutenção vinculado ao ativo."""
+
+    equipamento = models.ForeignKey(
+        Equipamento, verbose_name="equipamento", on_delete=models.CASCADE, related_name="manutencoes"
+    )
+    data = models.DateField("data")
+    problema = models.TextField("problema")
+    acao = models.TextField("ação executada")
+    observacao = models.TextField("observação", blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+        verbose_name = "manutenção"
+        verbose_name_plural = "manutenções"
+
+    def __str__(self):
+        return f"{self.equipamento.patrimonio} — {self.data:%d/%m/%Y}"
+
+
+class Movimentacao(models.Model):
+    """US09 — histórico de movimentação entre ambientes."""
+
+    equipamento = models.ForeignKey(
+        Equipamento, verbose_name="equipamento", on_delete=models.CASCADE, related_name="movimentacoes"
+    )
+    origem = models.ForeignKey(
+        Ambiente, verbose_name="origem", on_delete=models.PROTECT, related_name="saidas", null=True, blank=True
+    )
+    destino = models.ForeignKey(
+        Ambiente, verbose_name="destino", on_delete=models.PROTECT, related_name="entradas"
+    )
+    observacao = models.TextField("observação", blank=True)
+    data = models.DateTimeField("data", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data", "-id"]
+        verbose_name = "movimentação"
+        verbose_name_plural = "movimentações"
+
+    def __str__(self):
+        return f"{self.equipamento.patrimonio}: {self.origem or '—'} → {self.destino}"

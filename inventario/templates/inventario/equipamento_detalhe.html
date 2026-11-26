@@ -14,8 +14,44 @@
   </dl>
   <p>
     <a class="btn" href="{% url 'inventario:equipamento_editar' equipamento.pk %}">Editar</a>
+    <a class="btn sec" href="{% url 'inventario:equipamento_mover' equipamento.pk %}">Mover de ambiente</a>
+    <a class="btn sec" href="{% url 'inventario:manutencao_nova' equipamento.pk %}">Registrar manutenção</a>
     {% if not equipamento.esta_inativo %}<a class="btn perigo" href="{% url 'inventario:equipamento_inativar' equipamento.pk %}">Inativar</a>{% endif %}
     <a class="btn sec" href="{% url 'inventario:equipamento_lista' %}">Voltar</a>
   </p>
+</div>
+
+<div class="card">
+  <h1>Histórico de manutenção</h1>
+  {% if manutencoes %}
+  <table>
+    <tr><th>Data</th><th>Problema</th><th>Ação executada</th><th>Observação</th></tr>
+    {% for m in manutencoes %}
+    <tr>
+      <td>{{ m.data|date:"d/m/Y" }}</td>
+      <td>{{ m.problema|linebreaksbr }}</td>
+      <td>{{ m.acao|linebreaksbr }}</td>
+      <td>{{ m.observacao|default:"—"|linebreaksbr }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="vazio">Nenhuma manutenção registrada para este equipamento.</p>{% endif %}
+</div>
+
+<div class="card">
+  <h1>Histórico de movimentação</h1>
+  {% if movimentacoes %}
+  <table>
+    <tr><th>Data</th><th>Origem</th><th>Destino</th><th>Observação</th></tr>
+    {% for mv in movimentacoes %}
+    <tr>
+      <td>{{ mv.data|date:"d/m/Y H:i" }}</td>
+      <td>{{ mv.origem|default:"—" }}</td>
+      <td>{{ mv.destino }}</td>
+      <td>{{ mv.observacao|default:"—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="vazio">Nenhuma movimentação registrada para este equipamento.</p>{% endif %}
 </div>
 {% endblock %}

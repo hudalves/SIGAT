@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand
 
-from inventario.models import Ambiente, Equipamento
+from django.utils import timezone
+
+from inventario.models import Ambiente, Equipamento, Manutencao
 
 
 class Command(BaseCommand):
@@ -31,4 +33,11 @@ class Command(BaseCommand):
                               planta_x=pos[0], planta_y=pos[1]),
             )
             criados += int(novo)
+        pc = Equipamento.objects.filter(patrimonio="DEMO-001").first()
+        if pc and not pc.manutencoes.exists():
+            Manutencao.objects.create(
+                equipamento=pc, data=timezone.localdate(),
+                problema="Computador lento ao iniciar (dado fictício de demonstração)",
+                acao="Limpeza de arquivos temporários e atualização do sistema",
+            )
         self.stdout.write(self.style.SUCCESS(f"Dados de demonstração prontos ({criados} novos equipamentos)."))

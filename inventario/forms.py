@@ -1,6 +1,8 @@
 from django import forms
 
-from .models import Ambiente, Equipamento
+from django.utils import timezone
+
+from .models import Ambiente, Equipamento, Manutencao
 
 
 class AmbienteForm(forms.ModelForm):
@@ -54,3 +56,51 @@ class EquipamentoForm(forms.ModelForm):
         if not patrimonio:
             raise forms.ValidationError("Informe a identificação/patrimônio.")
         return patrimonio
+
+
+class ManutencaoForm(forms.ModelForm):
+    """US08 — data, problema, ação executada e observação."""
+
+    class Meta:
+        model = Manutencao
+        fields = ["data", "problema", "acao", "observacao"]
+        widgets = {
+            "data": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "problema": forms.Textarea(attrs={"rows": 3}),
+            "acao": forms.Textarea(attrs={"rows": 3}),
+            "observacao": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.fields["data"].initial = timezone.localdate
+
+    def clean_data(self):
+        data = self.cleaned_data["data"]
+        if data > timezone.localdate():
+            raise forms.ValidationError("A data da manutenção não pode estar no futuro.")
+        return data
+
+    def clean_problema(self):
+        texto = self.cleaned_data["problema"].strip()
+        if not texto:
+            raise forms.ValidationError("Descreva o problema.")
+        return texto
+
+    def clean_acao(self):
+        texto = self.cleaned_data["acao"].strip()
+        if not texto:
+            raise forms.ValidationError("Informe a ação executada.")
+        return texto
+
+
+class MovimentacaoForm(forms.Form):
+    """US09 — escolher o novo ambiente (o atual não é oferecido)."""
+
+    destino = forms.ModelChoiceField(queryset=Ambiente.objects.all(), label="Novo ambiente", empty_label="Selecione…")
+    observacao = forms.CharField(label="Observação", required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+    def __init__(self, *args, equipamento, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["destino"].queryset = Ambiente.objects.exclude(pk=equipamento.ambiente_id)

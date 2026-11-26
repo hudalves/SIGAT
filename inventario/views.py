@@ -4,15 +4,16 @@ import json
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Prefetch, Q
-from django.shortcuts import get_object_or_404, redirect
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, TemplateView, UpdateView
 
-from .forms import AmbienteForm, EquipamentoForm
-from .models import Ambiente, Equipamento
+from .forms import AmbienteForm, EquipamentoForm, ManutencaoForm, MovimentacaoForm
+from .models import Ambiente, Equipamento, Movimentacao
 
 
 def filtrar_equipamentos(params):
@@ -147,15 +148,17 @@ def planta_equipamento_posicao(request, pk):
         return JsonResponse({"erro": "dados inválidos"}, status=400)
     if not (0 <= x <= 100 and 0 <= y <= 100):
         return JsonResponse({"erro": "posição fora do ambiente"}, status=400)
-    campos = ["planta_x", "planta_y", "atualizado_em"]
+    novo = None
     if corpo.get("ambiente") is not None:
         try:
-            equipamento.ambiente = Ambiente.objects.get(pk=int(corpo["ambiente"]))
+            novo = Ambiente.objects.get(pk=int(corpo["ambiente"]))
         except (TypeError, ValueError, Ambiente.DoesNotExist):
             return JsonResponse({"erro": "ambiente inválido"}, status=400)
-        campos.append("ambiente")
-    equipamento.planta_x, equipamento.planta_y = x, y
-    equipamento.save(update_fields=campos)
+    with transaction.atomic():
+        if novo is not None:
+            equipamento.mover_para(novo, "Movido na planta")
+        equipamento.planta_x, equipamento.planta_y = x, y
+        equipamento.save(update_fields=["planta_x", "planta_y", "atualizado_em"])
     return JsonResponse({"ok": True})
 
 
@@ -184,6 +187,12 @@ class EquipamentoDetailView(DetailView):
     template_name = "inventario/equipamento_detalhe.html"
     context_object_name = "equipamento"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["manutencoes"] = self.object.manutencoes.all()
+        ctx["movimentacoes"] = self.object.movimentacoes.select_related("origem", "destino")
+        return ctx
+
 
 class EquipamentoCreateView(CreateView):
     model = Equipamento
@@ -203,8 +212,67 @@ class EquipamentoUpdateView(UpdateView):
     extra_context = {"titulo": "Editar equipamento"}
 
     def form_valid(self, form):
+        origem_id = form.initial.get("ambiente")
+        resposta = super().form_valid(form)
+        if "ambiente" in form.changed_data and origem_id:
+            Movimentacao.objects.create(
+                equipamento=self.object, origem_id=origem_id, destino=self.object.ambiente,
+                observacao="Alterado na edição do equipamento",
+            )
+            self.object.planta_x = self.object.planta_y = None
+            self.object.save(update_fields=["planta_x", "planta_y"])
         messages.success(self.request, "Equipamento atualizado.")
+        return resposta
+
+
+class ManutencaoCreateView(CreateView):
+    """US08 — registra manutenção vinculada ao equipamento."""
+
+    form_class = ManutencaoForm
+    template_name = "inventario/form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.equipamento = get_object_or_404(Equipamento, pk=kwargs["pk"])
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["titulo"] = f"Registrar manutenção — {self.equipamento.patrimonio}"
+        return ctx
+
+    def form_valid(self, form):
+        form.instance.equipamento = self.equipamento
+        messages.success(self.request, "Manutenção registrada.")
         return super().form_valid(form)
+
+    def get_success_url(self):
+        return self.equipamento.get_absolute_url()
+
+
+class EquipamentoMoverView(View):
+    """US09 — muda o equipamento de ambiente e registra origem/destino/data."""
+
+    template_name = "inventario/form.html"
+
+    def _render(self, request, equipamento, form):
+        return render(request, self.template_name, {
+            "form": form,
+            "titulo": f"Mover {equipamento.patrimonio} para outro ambiente (hoje em {equipamento.ambiente})",
+        })
+
+    def get(self, request, pk):
+        equipamento = get_object_or_404(Equipamento, pk=pk)
+        return self._render(request, equipamento, MovimentacaoForm(equipamento=equipamento))
+
+    def post(self, request, pk):
+        equipamento = get_object_or_404(Equipamento, pk=pk)
+        form = MovimentacaoForm(request.POST, equipamento=equipamento)
+        if not form.is_valid():
+            return self._render(request, equipamento, form)
+        destino = form.cleaned_data["destino"]
+        equipamento.mover_para(destino, form.cleaned_data["observacao"].strip())
+        messages.success(request, f"{equipamento.patrimonio} foi movido para {destino}.")
+        return redirect(equipamento.get_absolute_url())
 
 
 class EquipamentoInativarView(View):

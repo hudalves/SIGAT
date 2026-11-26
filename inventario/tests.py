@@ -257,3 +257,108 @@ class CriteriosPlantaTests(TestCase):  # critérios de aceite US05, US06 e US07
         resp = self.client.get(reverse("inventario:equipamento_detalhe", args=[self.eq.pk]))
         for texto in ("CA20", "Dell", "OptiPlex 3080", "SN-XYZ-99", "Em uso", "Recepção", "Teclado trocado em outubro"):
             self.assertContains(resp, texto)
+
+
+class ManutencaoTests(TestCase):  # US08
+    def setUp(self):
+        self.amb = criar_ambiente("Sala TI")
+        self.eq = Equipamento.objects.create(**{**dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA30"})
+        self.outro = Equipamento.objects.create(**{**dados_equipamento(self.amb), "ambiente": self.amb, "patrimonio": "CA31"})
+        self.url = reverse("inventario:manutencao_nova", args=[self.eq.pk])
+
+    def dados(self, **extra):
+        from django.utils import timezone
+        base = {"data": timezone.localdate().isoformat(), "problema": "Não liga", "acao": "Troca da fonte", "observacao": ""}
+        base.update(extra)
+        return base
+
+    def test_registra_manutencao_e_mostra_na_ficha(self):
+        resp = self.client.post(self.url, self.dados())
+        self.assertRedirects(resp, self.eq.get_absolute_url())
+        self.assertEqual(self.eq.manutencoes.count(), 1)
+        ficha = self.client.get(self.eq.get_absolute_url())
+        self.assertContains(ficha, "Não liga")
+        self.assertContains(ficha, "Troca da fonte")
+
+    def test_historico_fica_vinculado_ao_ativo(self):
+        self.client.post(self.url, self.dados())
+        self.assertNotContains(self.client.get(self.outro.get_absolute_url()), "Troca da fonte")
+
+    def test_rejeita_data_futura(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        futuro = (timezone.localdate() + timedelta(days=3)).isoformat()
+        self.assertEqual(self.client.post(self.url, self.dados(data=futuro)).status_code, 200)
+        self.assertEqual(self.eq.manutencoes.count(), 0)
+
+    def test_exige_problema_e_acao(self):
+        self.client.post(self.url, self.dados(problema="   "))
+        self.client.post(self.url, self.dados(acao=""))
+        self.assertEqual(self.eq.manutencoes.count(), 0)
+
+    def test_historico_mais_recente_primeiro(self):
+        self.client.post(self.url, self.dados(data="2026-01-10", problema="Antigo"))
+        self.client.post(self.url, self.dados(data="2026-03-10", problema="Recente"))
+        problemas = [m.problema for m in self.eq.manutencoes.all()]
+        self.assertEqual(problemas, ["Recente", "Antigo"])
+
+    def test_sem_manutencao_mostra_mensagem_de_vazio(self):
+        self.assertContains(self.client.get(self.eq.get_absolute_url()), "Nenhuma manutenção registrada")
+
+
+class MovimentacaoTests(TestCase):  # US09
+    def setUp(self):
+        self.origem = criar_ambiente("Recepção")
+        self.destino = criar_ambiente("Sala TI")
+        self.eq = Equipamento.objects.create(**{
+            **dados_equipamento(self.origem), "ambiente": self.origem, "patrimonio": "CA40",
+            "planta_x": 30, "planta_y": 40,
+        })
+        self.url = reverse("inventario:equipamento_mover", args=[self.eq.pk])
+
+    def test_move_atualiza_localizacao_e_registra_historico(self):
+        resp = self.client.post(self.url, {"destino": self.destino.pk, "observacao": "Troca de setor"})
+        self.assertRedirects(resp, self.eq.get_absolute_url())
+        self.eq.refresh_from_db()
+        self.assertEqual(self.eq.ambiente, self.destino)
+        mov = self.eq.movimentacoes.get()
+        self.assertEqual((mov.origem, mov.destino, mov.observacao), (self.origem, self.destino, "Troca de setor"))
+        self.assertIsNotNone(mov.data)
+
+    def test_move_zera_posicao_antiga_na_planta(self):
+        self.client.post(self.url, {"destino": self.destino.pk})
+        self.eq.refresh_from_db()
+        self.assertIsNone(self.eq.planta_x)
+
+    def test_ambiente_atual_nao_e_aceito_como_destino(self):
+        resp = self.client.post(self.url, {"destino": self.origem.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.eq.movimentacoes.count(), 0)
+
+    def test_historico_aparece_na_ficha(self):
+        self.client.post(self.url, {"destino": self.destino.pk})
+        ficha = self.client.get(self.eq.get_absolute_url())
+        self.assertContains(ficha, "Recepção")
+        self.assertContains(ficha, "Sala TI")
+
+    def test_mover_na_planta_tambem_registra_movimentacao(self):
+        url = reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])
+        resp = self.client.post(url, data=json.dumps({"x": 20, "y": 20, "ambiente": self.destino.pk}), content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        self.eq.refresh_from_db()
+        self.assertEqual(self.eq.ambiente, self.destino)
+        self.assertEqual((self.eq.planta_x, self.eq.planta_y), (20, 20))
+        self.assertEqual(self.eq.movimentacoes.count(), 1)
+
+    def test_posicionar_no_mesmo_ambiente_nao_registra_movimentacao(self):
+        url = reverse("inventario:planta_equipamento_pos", args=[self.eq.pk])
+        self.client.post(url, data=json.dumps({"x": 50, "y": 50, "ambiente": self.origem.pk}), content_type="application/json")
+        self.assertEqual(self.eq.movimentacoes.count(), 0)
+
+    def test_trocar_ambiente_na_edicao_registra_movimentacao(self):
+        dados = dados_equipamento(self.origem, patrimonio="CA40", ambiente=self.destino.pk)
+        self.client.post(reverse("inventario:equipamento_editar", args=[self.eq.pk]), dados)
+        self.eq.refresh_from_db()
+        self.assertEqual(self.eq.ambiente, self.destino)
+        mov = self.eq.movimentacoes.get()
+        self.assertEqual((mov.origem, mov.destino), (self.origem, self.destino))

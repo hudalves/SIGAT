@@ -40,6 +40,8 @@ python manage.py test
 | US02 Cadastro de equipamento | `/equipamentos/novo/` |
 | US03 Consulta e busca | `/equipamentos/` (busca por patrimônio, nome/modelo, categoria) |
 | Planta 2D interativa | `/planta/` — arraste ambientes e equipamentos (Modo edição), clique para ver detalhes, busca e filtro por categoria; mover um item para outro ambiente atualiza a localização |
+| US08 Histórico de manutenção | ficha do equipamento → "Registrar manutenção"; histórico na própria ficha |
+| US09 Movimentação | ficha → "Mover de ambiente"; também ao arrastar na planta ou trocar o ambiente na edição |
 | US10 Exportar CSV | botão "Exportar CSV" em `/equipamentos/` (respeita busca, categoria e inativos); abre direto no Excel |
 | US04 Editar / inativar | `/equipamentos/<id>/editar/`, `/equipamentos/<id>/inativar/` |
 
